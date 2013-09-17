@@ -7,7 +7,11 @@ module Razor
       res = Net::HTTP.get(uri)
       response_hash = JSON.parse(res)
       return nil if response_hash['response'].empty?
-      return response_hash["response"].first["@uuid"]
+      retval = []
+      response_hash['response'].each do |item|
+        retval += [item['@uuid']]
+      end
+      return retval
     end
 
     # return uuid of tag's matcher or nil if matcher doesn't exist
@@ -45,6 +49,40 @@ module Razor
         ui.fatal "Error updating #{sliceuuid}"
         exit 1
       end
+    end
+
+    def delete_object(razor_api,slice,sliceuuid)
+      http = Net::HTTP.new(razor_api.split(':')[0],razor_api.split(':')[1])
+      request = Net::HTTP::Delete.new("/razor/api/#{slice}/#{sliceuuid}")
+      res = http.request(request)
+      response_hash = JSON.parse(res.body)
+      unless res.class == Net::HTTPAccepted
+        ui.fatal "Error removing #{slice} - #{sliceuuid}"
+        exit 1
+      end
+   end
+
+    def get_nodes(razor_api,type)
+      uri = URI "http://#{razor_api}/razor/api/node?status=active"
+      res = Net::HTTP.get(uri)
+      response_hash = JSON.parse(res)
+      if response_hash['response'].empty?
+        return "Number of idle nodes: 0"
+      else
+        return_value = "Number of idle nodes: #{response_hash['response'].size}\n\n"
+        response_hash['response'].each do |node|
+          return_value += "nodeuuid: #{node['@uuid']}\n"
+          uri = URI "http://#{razor_api}/razor/api/node/#{node['@uuid']}"
+          res = Net::HTTP.get(uri)
+          response_hash = JSON.parse(res)
+          response_hash['response'].first['@attributes_hash']['interfaces'].split(',').each do |i|
+            next if i =~ /(lo|dummy)/
+            return_value += "macaddress_#{i}: #{response_hash['response'].first['@attributes_hash']["macaddress_#{i}"]}\n"
+          end
+          return_value += "\n"
+        end
+      end
+      return return_value
     end
 
   end
